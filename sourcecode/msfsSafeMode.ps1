@@ -1,55 +1,149 @@
-# safeModeSwitch for Microsoft Flight Simulator 2020
+# msfsSafeModeSwitch for Microsoft Flight Simulator
 # Created and released by @teezythakidd
-# This script serves the purpose of allowing fellow Flight Simmers (that use MSFS 2020) to choose whether they want to start the sim in Safe Mode or Normal Mode.
+# This script serves the purpose of allowing fellow Flight Simmers to choose whether they want to start MSFS 2020 or MSFS 2024 in Safe Mode or Normal Mode.
 # See the README for more info.
-
-# Version 2.6.2
-# --- Added code that I thought would stop the "Cancel" dialog box from appearing, but that didn't go too well.
-# --- Yes - there is a "Cancel" dialog that appears when you click "Cancel" or "X" out of the program. I don't know why, and I'm having trouble figuring that out lol.
-# --- But we have an executable now. You're welcome :)
-# Version 2.6.1
-# --- Removed duplicate array
-# --- Cleaned up response/feedback logic
-# Version 2.6
-# --- Resolved an issue when launching the script via Desktop shortcut by adding various instances of *[System.Windows.Forms.MessageBox]*.
-# --- Code updated (slightly) for executable beta ;) TIL about ps2exe! 
-# Version 2.5
-# --- Improved logic and error handling a LOT. Script now prints debugging info to terminal (when run in PS, PS ISE, or VS Code).
-# --- Now using gamelaunchhelper.exe for the launch instead of FlightSimulator.exe
-# --- Resolved issue where the sim would launch when the auto-start chechbox was not checked.
-# Version 2.4.2
-# --- Added logic for a custom icon for the form that is currently disabled, but "ready". Mostly.
-# Version 2.4.1
-# --- Minor UI tweaks/improvements.
-# Version 2.4
-# --- Introduction of v2 of the UI - much nicer to look at, although extremely basic.
-# --- Window size, button placement and text alignment(s) adjusted.
-# Version 2.3
-# --- Functional enhancements. Minor UI corrections.
-# Version 2.2
-# --- Fixed window sizing. Button alignment and radio button label clipping to be fixed in a future build of the script...
-# Version 2.1
-# --- Returned the missing assemblies (System.Windows.Forms, System.Drawing). Prompt now appears without incident at the center of the screen, but realizing that the sizing is still incorrect. Will fix in next release.
-# Version 2.0
-# --- Made it... work. Updated $storePath, still need to verify $steamPath but I only have the MS version! Please submit a Pull request with this value if you don't mind :)
-# --- Also adjusted the form configuration so that it opens at the center of the screen and fits all of the text (increased form MinimumSize to 400x250, Size properties to buttons added to avoid more cut-off text).
-# --- Blah blah blah...
-# Version 1.0
-# --- Initial release.
+# All changes are in CHANGELOG.md.
 
 # Add required assemblies
 Add-Type -AssemblyName 'System.Windows.Forms'
 Add-Type -AssemblyName 'System.Drawing'
 
-# Define paths for MSFS based on the version selected
-$storePath = "C:\XboxGames\Microsoft Flight Simulator\Content\"  # Example path for the MS Store version
-$steamPath = "C:\Program Files (x86)\Steam\steamapps\common\MicrosoftFlightSimulator\"  # Example path for the Steam version
+# Define paths for MSFS based on the sim and platform selected
+$simConfigurations = @{
+    "MSFS 2020" = @{
+        "Microsoft Store / Xbox" = "C:\XboxGames\Microsoft Flight Simulator\Content\"
+        "Steam"                  = "C:\Program Files (x86)\Steam\steamapps\common\MicrosoftFlightSimulator\"
+    }
+    "MSFS 2024" = @{
+        "Microsoft Store / Xbox" = "C:\XboxGames\Microsoft Flight Simulator 2024\Content\"
+        "Steam"                  = "C:\Program Files (x86)\Steam\steamapps\common\Microsoft Flight Simulator 2024\"
+    }
+}
 $gameLaunchHelperExe = "gamelaunchhelper.exe"  # The correct executable for launching MSFS
+
+function Get-SelectedSimName {
+    if ($msfs2024Radio.Checked) { return "MSFS 2024" }
+    return "MSFS 2020"
+}
+
+function Get-SelectedPlatformName {
+    if ($steamRadio.Checked) { return "Steam" }
+    return "Microsoft Store / Xbox"
+}
+
+function Get-SelectedPath {
+    $selectedSim = Get-SelectedSimName
+    $selectedPlatform = Get-SelectedPlatformName
+    return $simConfigurations[$selectedSim][$selectedPlatform]
+}
+
+function Get-SelectionDescription {
+    $selectedSim = Get-SelectedSimName
+    $selectedPlatform = Get-SelectedPlatformName
+    return "$selectedSim ($selectedPlatform)"
+}
+
+function Center-ControlHorizontally {
+    param (
+        [System.Windows.Forms.Control]$Control,
+        [System.Windows.Forms.Control]$Parent
+    )
+
+    $x = [Math]::Max(0, [int](($Parent.ClientSize.Width - $Control.Width) / 2))
+    $Control.Location = New-Object System.Drawing.Point($x, $Control.Location.Y)
+}
+
+function Center-CheckboxVisually {
+    param (
+        [System.Windows.Forms.CheckBox]$CheckBox,
+        [System.Windows.Forms.Control]$Parent,
+        [int]$GlyphCompensation = 9
+    )
+
+    $x = [Math]::Max(0, [int](($Parent.ClientSize.Width - $CheckBox.Width) / 2) + $GlyphCompensation)
+    $CheckBox.Location = New-Object System.Drawing.Point($x, $CheckBox.Location.Y)
+}
+
+function Center-ButtonRow {
+    param (
+        [System.Windows.Forms.Control[]]$Controls,
+        [System.Windows.Forms.Control]$Parent,
+        [int]$Spacing
+    )
+
+    $totalWidth = 0
+    for ($i = 0; $i -lt $Controls.Count; $i++) {
+        $totalWidth += $Controls[$i].Width
+        if ($i -lt ($Controls.Count - 1)) {
+            $totalWidth += $Spacing
+        }
+    }
+
+    $x = [Math]::Max(0, [int](($Parent.ClientSize.Width - $totalWidth) / 2))
+    foreach ($control in $Controls) {
+        $control.Location = New-Object System.Drawing.Point($x, $control.Location.Y)
+        $x += $control.Width + $Spacing
+    }
+}
+
+function Invoke-SimModeChange {
+    param (
+        [bool]$EnableSafeMode
+    )
+
+    $selectedPath = Get-SelectedPath
+    $selectionDescription = Get-SelectionDescription
+    $msfsExePath = Join-Path $selectedPath $gameLaunchHelperExe
+    $runningLockPath = Join-Path $selectedPath 'running.lock'
+
+    if (-not (Test-Path $msfsExePath)) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Error: The MSFS executable was not found for $selectionDescription.`n`nChecked path:`n$msfsExePath",
+            "Error",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Error
+        )
+        return
+    }
+
+    if ($EnableSafeMode) {
+        New-Item -Path $runningLockPath -ItemType File -Force | Out-Null
+        [System.Windows.Forms.MessageBox]::Show(
+            "Safe Mode is activated for $selectionDescription.`n`n`"running.lock`" file created.",
+            "Confirmation",
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        )
+    } else {
+        if (Test-Path $runningLockPath) {
+            Remove-Item -Path $runningLockPath -Force
+            [System.Windows.Forms.MessageBox]::Show(
+                "`"running.lock`" file deleted. Normal Mode activated for $selectionDescription.",
+                "Confirmation",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            )
+        } else {
+            [System.Windows.Forms.MessageBox]::Show(
+                "No `"running.lock`" file found. Normal Mode activated for $selectionDescription.",
+                "Confirmation",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information
+            )
+        }
+    }
+
+    if ($autoStartCheckbox.Checked) {
+        Start-Process $msfsExePath
+    }
+
+    $form.Close()
+}
 
 # Create the form (application window)
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'msfs2020-safeModeSwitch'
-$form.Size = New-Object System.Drawing.Size(500, 250)  # Increased window size for better text fit
+$form.Text = 'msfs-safeModeSwitch'
+$form.Size = New-Object System.Drawing.Size(550, 340)  # Increased window size for the extra options
 
 # Set a fixed window size (width x height)
 $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog  # Makes the window non-resizable
@@ -64,113 +158,104 @@ $form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen  # 
 # Create a label that asks the user the question
 $label = New-Object System.Windows.Forms.Label
 $label.AutoSize = $true  # Ensures the label resizes to fit the text
-$label.Text = 'Do you want to open Microsoft Flight Simulator 2020 in Safe Mode or Normal Mode?'
-$label.Location = New-Object System.Drawing.Point(35, 20)  # Adjusted label position for new form size
+$label.Text = 'Choose your sim, platform, and launch mode.'
+$label.Location = New-Object System.Drawing.Point(0, 20)
 $form.Controls.Add($label)
-
-# Center the buttons
-$buttonWidth = 100
-$buttonSpacing = 10
-$totalButtonWidth = 3 * $buttonWidth + 2 * $buttonSpacing  # Total width of all buttons
 
 # Create Safe Mode button
 $safeButton = New-Object System.Windows.Forms.Button
 $safeButton.Text = 'Safe Mode'
-$safeButton.Location = New-Object System.Drawing.Point(90, 50)  # Adjusted button position
+$safeButton.Location = New-Object System.Drawing.Point(0, 50)
 $safeButton.Size = New-Object System.Drawing.Size(100, 30)  # Adjusted button size for better fit
 $form.Controls.Add($safeButton)
 
 # Create Normal Mode button
 $normalButton = New-Object System.Windows.Forms.Button
 $normalButton.Text = 'Normal Mode'
-$normalButton.Location = New-Object System.Drawing.Point(200, 50)  # Adjusted button position
+$normalButton.Location = New-Object System.Drawing.Point(0, 50)
 $normalButton.Size = New-Object System.Drawing.Size(100, 30)  # Adjusted button size for better fit
 $form.Controls.Add($normalButton)
 
 # Create Cancel button
 $cancelButton = New-Object System.Windows.Forms.Button
 $cancelButton.Text = 'Cancel'
-$cancelButton.Location = New-Object System.Drawing.Point(310, 50)  # Adjusted button position
+$cancelButton.Location = New-Object System.Drawing.Point(0, 50)
 $cancelButton.Size = New-Object System.Drawing.Size(100, 30)  # Adjusted button size for better fit
 $form.Controls.Add($cancelButton)
 
-# Create radio buttons for version selection
+# Group sim selection radio buttons separately from platform selection.
+$simGroupBox = New-Object System.Windows.Forms.GroupBox
+$simGroupBox.Text = 'Simulator'
+$simGroupBox.Location = New-Object System.Drawing.Point(0, 90)
+$simGroupBox.Size = New-Object System.Drawing.Size(280, 70)
+$form.Controls.Add($simGroupBox)
+
+# Create radio buttons for sim selection
+$msfs2020Radio = New-Object System.Windows.Forms.RadioButton
+$msfs2020Radio.Text = 'MSFS 2020'
+$msfs2020Radio.Checked = $true
+$msfs2020Radio.Location = New-Object System.Drawing.Point(15, 30)
+$msfs2020Radio.Size = New-Object System.Drawing.Size(120, 30)
+$simGroupBox.Controls.Add($msfs2020Radio)
+# ---
+$msfs2024Radio = New-Object System.Windows.Forms.RadioButton
+$msfs2024Radio.Text = 'MSFS 2024'
+$msfs2024Radio.Location = New-Object System.Drawing.Point(145, 30)
+$msfs2024Radio.Size = New-Object System.Drawing.Size(120, 30)
+$simGroupBox.Controls.Add($msfs2024Radio)
+
+# Create a separate group for platform selection.
+$platformGroupBox = New-Object System.Windows.Forms.GroupBox
+$platformGroupBox.Text = 'Platform'
+$platformGroupBox.Location = New-Object System.Drawing.Point(0, 165)
+$platformGroupBox.Size = New-Object System.Drawing.Size(280, 85)
+$form.Controls.Add($platformGroupBox)
+
+# Create radio buttons for platform selection
 $storeRadio = New-Object System.Windows.Forms.RadioButton
-$storeRadio.Text = 'Microsoft Store version'
+$storeRadio.Text = 'Microsoft Store / Xbox'
 $storeRadio.Checked = $true
-$storeRadio.Location = New-Object System.Drawing.Point(50, 95)  # Adjusted radio button position
-$storeRadio.Size = New-Object System.Drawing.Size(150,30) # FINALLY ADJUSTED RADIO BUTTON **LABEL** POSITION
-$form.Controls.Add($storeRadio)
+$storeRadio.Location = New-Object System.Drawing.Point(15, 25)
+$storeRadio.Size = New-Object System.Drawing.Size(180,30)
+$platformGroupBox.Controls.Add($storeRadio)
 # ---
 $steamRadio = New-Object System.Windows.Forms.RadioButton
-$steamRadio.Text = 'Steam version'
-$steamRadio.Location = New-Object System.Drawing.Point(50, 120)  # Adjusted radio button position
-$steamRadio.Size = New-Object System.Drawing.Size(150,30) # FINALLY ADJUSTED RADIO BUTTON **LABEL** POSITION
-$form.Controls.Add($steamRadio)
+$steamRadio.Text = 'Steam'
+$steamRadio.Location = New-Object System.Drawing.Point(15, 50)
+$steamRadio.Size = New-Object System.Drawing.Size(120,30)
+$platformGroupBox.Controls.Add($steamRadio)
 
 # Create a checkbox for auto-starting MSFS
 $autoStartCheckbox = New-Object System.Windows.Forms.CheckBox
-$autoStartCheckbox.Text = 'Check the box to auto-start MSFS 2020 after making your selection.'
-$autoStartCheckbox.Location = New-Object System.Drawing.Point(50, 155)  # Adjusted checkbox position
-$autoStartCheckbox.Size = New-Object System.Drawing.Size(600, 30)  # Width is adjusted to fit the text
+$autoStartCheckbox.AutoSize = $true
+$autoStartCheckbox.Text = 'Check the box to auto-start the selected sim after making your selection.'
+$autoStartCheckbox.Location = New-Object System.Drawing.Point(0, 255)
 $form.Controls.Add($autoStartCheckbox)
 
 # Event handler for Safe Mode button
 $safeButton.Add_Click({
-    $selectedPath = If ($storeRadio.Checked) { $storePath } else { $steamPath }
-    $msfsExePath = Join-Path $selectedPath $gameLaunchHelperExe
-
-    if (Test-Path $msfsExePath) {
-        # Create the "running.lock" file for Safe Mode
-        $runningLockPath = Join-Path $selectedPath 'running.lock'
-        New-Item -Path $runningLockPath -ItemType File -Force | Out-Null
-        [System.Windows.Forms.MessageBox]::Show('Safe Mode is activated. "running.lock" file created.', "Confirmation", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
-
-        if ($autoStartCheckbox.Checked) {
-            Start-Process $msfsExePath
-        }
-    } else {
-        [System.Windows.Forms.MessageBox]::Show("Error: The MSFS executable was not found at the specified path.", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-    }
-
-    $form.Close()
+    Invoke-SimModeChange -EnableSafeMode $true
 })
 
 # Event handler for Normal Mode button
 $normalButton.Add_Click({
-    $selectedPath = If ($storeRadio.Checked) { $storePath } else { $steamPath }
-    $msfsExePath = Join-Path $selectedPath $gameLaunchHelperExe
-
-    if (Test-Path $msfsExePath) {
-        # Delete the "running.lock" file for Normal Mode
-        $runningLockPath = Join-Path $selectedPath 'running.lock'
-        if (Test-Path $runningLockPath) {
-            Remove-Item -Path $runningLockPath -Force
-            [System.Windows.Forms.MessageBox]::Show('"running.lock" file deleted. Normal Mode activated.', "Confirmation", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
-        } else {
-            [System.Windows.Forms.MessageBox]::Show('No "running.lock" file found. Normal Mode activated.', "Confirmation", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
-        }
-
-        if ($autoStartCheckbox.Checked) {
-            Start-Process $msfsExePath
-        }
-    } else {
-        [System.Windows.Forms.MessageBox]::Show("Error: The MSFS executable was not found at the specified path.", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-    }
-
-    $form.Close()
+    Invoke-SimModeChange -EnableSafeMode $false
 })
 
-# Event handler for Cancel button
-$cancelButton.Add_Click({
-    # Simply close the form without additional dialogs or operations
-    $form.Close()
-})
+# Configure Cancel button behavior so the form can close cleanly.
+$cancelButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+$form.CancelButton = $cancelButton
 
-# Ensure no dialog appears when closing with the "X" button
-$form.add_FormClosing({
-    # Do nothing
-})
+# Center the non-button UI elements based on the form width.
+$centerLayout = {
+    Center-ButtonRow -Controls @($safeButton, $normalButton, $cancelButton) -Parent $form -Spacing 10
+    Center-ControlHorizontally -Control $label -Parent $form
+    Center-ControlHorizontally -Control $simGroupBox -Parent $form
+    Center-ControlHorizontally -Control $platformGroupBox -Parent $form
+    Center-CheckboxVisually -CheckBox $autoStartCheckbox -Parent $form
+}
 
-# Show the form (launch the window)
-$form.ShowDialog()
+$form.Add_Shown($centerLayout)
+
+# Show the form (launch the window) and suppress the dialog result output.
+$form.ShowDialog() | Out-Null
