@@ -1,5 +1,7 @@
-# msfs-safeModeSwitch
+# MSFS Safe Mode Switch
 A "simple" PowerShell tool for forcing the option of running MSFS 2020 or MSFS 2024 in Safe Mode or Normal Mode by either adding or removing the `running.lock` file in the sim's active directory.
+
+<img width="546" height="338" alt="ui-v2 7" src="https://github.com/user-attachments/assets/4e65d242-8875-463f-96d6-1a7433b58467" />
 
 This "tool", whatever have you, assumes you are comfortable with basic navigation of Command Prompt and/or PowerShell, and that you have PowerShell installed. If you don't have PowerShell installed, install it from [here](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows?view=powershell-7.4).
 An executable is also now available!
@@ -23,9 +25,6 @@ On the next launch of the sim with the `running.lock` file in place, the user wi
 ## [What does booting in Safe Mode do?](https://flightsimulator.zendesk.com/hc/en-us/articles/4405893759378-Safe-Mode-FAQ)
 Per the documentation, *Safe Mode in Microsoft Flight Simulator disables temporarily: third-party content from the Marketplace and mods from the community folder.*
 This can allow for an optimal experience with the base sim; minimal lagging or frame drops, screen tearing, and so on.
-
-## UI Preview (as of version 2.7)
-<img width="546" height="338" alt="ui-v2 7" src="https://github.com/user-attachments/assets/4e65d242-8875-463f-96d6-1a7433b58467" />
 
 # It really isn't that bad.
 Aside from missing custom/third-party scenery, aircraft, and other random add-ons (P42 simFX, RealTurb CAT, to name a few) there really is no downside to running the sim in Safe Mode, and all fellow simmers deserve an easily-accessible option for choosing how to launch the sim.
